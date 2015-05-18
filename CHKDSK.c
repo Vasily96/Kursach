@@ -8,10 +8,9 @@
 
 VOID Usage(PWCHAR ProgramName)
 {
-	_tprintf(L"Использование: %s [drive:] [-F] [-V] [-R] [-C]\n\n");
+	_tprintf(L"Использование: %s [drive:]  [-R] [-C]\n\n");
 	_tprintf(L"  [drive:]    Определяет диск, чтобы проверить.\n");
-	_tprintf(L"  -F         Исправления ошибок на диске.\n");
-	_tprintf(L"  -V         Отображение пути каждого файла на диске.\n");
+	;
 	_tprintf(L"  -R          Нахождение плохих секторов и восстановление той части данных.\n");
 	_tprintf(L"  -C          Проверяет диск, только если он загрязнен.\n");
 	_tprintf(L"\n");
@@ -28,13 +27,66 @@ void PrintWin32Error(PWCHAR Message, DWORD ErrorCode)
 	LocalFree(lpMsgBuf);
 }
 
-BOOLEAN __stdcall ChkdskCallback(CALLBACKCOMMAND Command, DWORD Modifier, PVOID Argument)
+int ParseCommandLine(int argc, WCHAR *argv[])
+{
+	int i;
+	BOOLEAN gotFix = FALSE;
+
+	BOOLEAN gotClean = FALSE;
+
+
+
+	for (i = 1; i < argc; i++) {
+
+		switch (argv[i][0]) {
+
+		case '-':
+		case '/':
+
+			switch (argv[i][1]) {
+
+
+			case L'R':
+			case L'r':
+
+				if (gotFix) return i;
+				ScanSectors = TRUE;
+				gotFix = TRUE;
+				break;
+
+			case L'C':
+			case L'c':
+
+				if (gotClean) return i;
+				SkipClean = TRUE;
+				gotClean = TRUE;
+				break;
+
+			default:
+				return i;
+			}
+			break;
+
+		default:
+
+			if (Drive) return i;
+			if (argv[i][1] != L':') return i;
+
+			Drive = argv[i];
+			break;
+		}
+	}
+	return 0;
+}
+
+
+//------------------------------------------------------------
+BOOLEAN __stdcall ChkdskCallback(CALLBACKCOMMAND Command, PVOID Argument)
 {
 	PDWORD percent;
 	PBOOLEAN status;
 	PTEXTOUTPUT output;
 
-	
 	
 	switch (Command) {
 
@@ -61,7 +113,6 @@ BOOLEAN __stdcall ChkdskCallback(CALLBACKCOMMAND Command, DWORD Modifier, PVOID 
 }
 
 
-
 BOOLEAN LoadFMIFSEntryPoints()
 {
 	LoadLibrary("fmifs.dll");
@@ -73,6 +124,9 @@ BOOLEAN LoadFMIFSEntryPoints()
 	}
 	return TRUE;
 }
+
+
+//---------------------------------------------------------------------
 int wmain(int argc, WCHAR *argv[])
 {
 	int badArg;
@@ -82,21 +136,75 @@ int wmain(int argc, WCHAR *argv[])
 	DWORD serialNumber;
 	DWORD flags, maxComponent;
 
-	
+
 
 	
 	if (!LoadFMIFSEntryPoints()) {
 
-		_tprintf(L"Не удалось обнаружить точки входа FMIFS.\n\n");
+		_tprintf(L"Could not located FMIFS entry points.\n\n");
 		return -1;
 	}
 
 	
 	if ((badArg = ParseCommandLine(argc, argv))) {
 
-		_tprintf(L"Неизвестный аргумент : %s\n", argv[badArg]);
+		_tprintf(L"Unknown argument: %s\n", argv[badArg]);
 
-		Usage(argv[0]);
+
 		return -1;
 	}
+
+	
+	if (!Drive) {
+
+		if (!GetCurrentDirectoryW(sizeof(CurrentDirectory), CurrentDirectory)) {//Retrieves the current directory for the current process
+
+			PrintWin32Error(L"Could not get current directory", GetLastError());
+			return -1;
+		}
+
+	}
+	else {
+
+		wcscpy(CurrentDirectory, Drive);
+	}
+	CurrentDirectory[2] = L'\\';
+	CurrentDirectory[3] = (WCHAR)0;
+	Drive = CurrentDirectory;
+
+	
+	if (!GetVolumeInformationW(Drive,
+		volumeName, sizeof(volumeName),
+		&serialNumber, &maxComponent, &flags,
+		fileSystem, sizeof(fileSystem))) {
+
+		PrintWin32Error(L"Could not query volume", GetLastError());
+		return -1;
+	}
+
+	
+	if (FixErrors) {
+
+		swprintf(volumeName, L"\\\\.\\%C:", Drive[0]);
+		volumeHandle = CreateFileW(volumeName, GENERIC_WRITE,
+			0, NULL, OPEN_EXISTING,
+			0, 0);
+		if (volumeHandle == INVALID_HANDLE_VALUE) {
+
+			_tprintf(L"Chdskx cannot run because the volume is in use by another process.\n\n");
+			return -1;
+		}
+		CloseHandle(volumeHandle);
+
+		
+		SetConsoleCtrlHandler(CtrlCIntercept, TRUE);
+	}
+
+	
+	_tprintf(L"The type of file system is %s.\n", fileSystem);
+	Chkdsk(Drive, fileSystem, FixErrors, Verbose, SkipClean, ScanSectors,
+		NULL, NULL, ChkdskCallback);
+
+	if (Error) return -1;
+	return 0;
 }
