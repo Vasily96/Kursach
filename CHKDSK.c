@@ -87,7 +87,7 @@ BOOLEAN __stdcall ChkdskCallback(CALLBACKCOMMAND Command, PVOID Argument)
 	PBOOLEAN status;
 	PTEXTOUTPUT output;
 
-	
+
 	switch (Command) {
 
 	case PROGRESS:
@@ -138,14 +138,14 @@ int wmain(int argc, WCHAR *argv[])
 
 
 
-	
+
 	if (!LoadFMIFSEntryPoints()) {
 
 		_tprintf(L"Could not located FMIFS entry points.\n\n");
 		return -1;
 	}
 
-	
+
 	if ((badArg = ParseCommandLine(argc, argv))) {
 
 		_tprintf(L"Unknown argument: %s\n", argv[badArg]);
@@ -154,7 +154,7 @@ int wmain(int argc, WCHAR *argv[])
 		return -1;
 	}
 
-	
+
 	if (!Drive) {
 
 		if (!GetCurrentDirectoryW(sizeof(CurrentDirectory), CurrentDirectory)) {//Retrieves the current directory for the current process
@@ -172,7 +172,7 @@ int wmain(int argc, WCHAR *argv[])
 	CurrentDirectory[3] = (WCHAR)0;
 	Drive = CurrentDirectory;
 
-	
+
 	if (!GetVolumeInformationW(Drive,
 		volumeName, sizeof(volumeName),
 		&serialNumber, &maxComponent, &flags,
@@ -182,7 +182,7 @@ int wmain(int argc, WCHAR *argv[])
 		return -1;
 	}
 
-	
+
 	if (FixErrors) {
 
 		swprintf(volumeName, L"\\\\.\\%C:", Drive[0]);
@@ -196,11 +196,11 @@ int wmain(int argc, WCHAR *argv[])
 		}
 		CloseHandle(volumeHandle);
 
-		
+
 		SetConsoleCtrlHandler(CtrlCIntercept, TRUE);
 	}
 
-	
+
 	_tprintf(L"The type of file system is %s.\n", fileSystem);
 	Chkdsk(Drive, fileSystem, FixErrors, Verbose, SkipClean, ScanSectors,
 		NULL, NULL, ChkdskCallback);
